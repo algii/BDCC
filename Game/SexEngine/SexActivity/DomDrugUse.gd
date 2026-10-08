@@ -10,6 +10,10 @@ var directed_page:String = "main"
 var directed_breasts:int = -999
 var directed_penis:String = ""
 var directed_length:float = 0.0
+var directed_thickness:int = -1
+var directed_femininity:int = -1
+var directed_vagina:String = ""
+var directed_color:String = ""
 
 func _init():
 	id = "DomDrugUse"
@@ -166,6 +170,10 @@ func startActivity(_args):
 		directed_breasts = -999
 		directed_penis = ""
 		directed_length = 0.0
+		directed_thickness = -1
+		directed_femininity = -1
+		directed_vagina = ""
+		directed_color = ""
 		setState("directed_tf_menu")
 		addText("{dom.You} {dom.youVerb('prepare')} a custom TF pill for {sub.you}. Choose changes below, then give the pill.")
 		return
@@ -526,6 +534,10 @@ func _directed_add_actions():
 		addAction("custom_breasts", 1.0, "Breasts: " + DIRECTED_TF.breast_label(directed_breasts), "Select a breast size")
 		addAction("custom_penis", 1.0, "Penis: " + DIRECTED_TF.penis_label(directed_penis), "Select a penis type")
 		addAction("custom_length", 1.0, "Length: " + DIRECTED_TF.length_label(directed_length), "Choose penis length")
+		addAction("custom_thickness", 1.0, "Thickness: " + DIRECTED_TF.thickness_label(directed_thickness), "Choose body thickness")
+		addAction("custom_femininity", 1.0, "Femininity: " + DIRECTED_TF.femininity_label(directed_femininity), "Choose masculinity/femininity")
+		addAction("custom_vagina", 1.0, "Vagina: " + DIRECTED_TF.vagina_label(directed_vagina), "Choose vagina type, add or remove")
+		addAction("custom_color", 1.0, "Colors: " + DIRECTED_TF.color_label(directed_color), "Choose random colors/skin")
 		addAction("custom_apply", 1.0, "Give custom TF pill", "Consume one pill and apply these changes to this NPC")
 		addAction("custom_cancel", 1.0, "Cancel", "Return without consuming the pill")
 	elif(directed_page == "breasts"):
@@ -545,6 +557,28 @@ func _directed_add_actions():
 		for length in DIRECTED_TF.PENIS_LENGTHS:
 			addAction("custom_l_" + str(length), 1.0, str(length) + " cm", "Choose length")
 		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "thickness"):
+		addAction("custom_t_-1", 1.0, "No change", "Leave thickness unchanged")
+		for value in DIRECTED_TF.THICKNESS_VALUES:
+			addAction("custom_t_" + str(value), 1.0, str(value) + "%", "Set thickness")
+		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "femininity"):
+		addAction("custom_f_-1", 1.0, "No change", "Leave femininity unchanged")
+		for value in DIRECTED_TF.FEMININITY_VALUES:
+			addAction("custom_f_" + str(value), 1.0, DIRECTED_TF.femininity_label(value), "Set femininity / masculinity")
+		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "vagina"):
+		addAction("custom_v_keep", 1.0, "No change", "Leave vagina unchanged")
+		addAction("custom_v_remove", 1.0, "Remove vagina", "Remove vagina")
+		for entry in DIRECTED_TF.VAGINA_TYPES:
+			if(GlobalRegistry.getBodypartRef(entry[0]) != null):
+				addAction("custom_v_" + entry[0], 1.0, entry[1], "Choose this vagina type")
+		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "color"):
+		addAction("custom_col_keep", 1.0, "No change", "Keep current colors")
+		for entry in DIRECTED_TF.COLOR_MODES:
+			addAction("custom_col_" + entry[0], 1.0, entry[1], "Randomize colors once when pill is used")
+		addAction("custom_back", 1.0, "Back", "Return")
 
 func _directed_handle_action(action_id:String):
 	if(action_id == "custom_breasts"):
@@ -553,6 +587,14 @@ func _directed_handle_action(action_id:String):
 		directed_page = "penis"
 	elif(action_id == "custom_length"):
 		directed_page = "length"
+	elif(action_id == "custom_thickness"):
+		directed_page = "thickness"
+	elif(action_id == "custom_femininity"):
+		directed_page = "femininity"
+	elif(action_id == "custom_vagina"):
+		directed_page = "vagina"
+	elif(action_id == "custom_color"):
+		directed_page = "color"
 	elif(action_id == "custom_back"):
 		directed_page = "main"
 	elif(action_id.begins_with("custom_b_")):
@@ -572,6 +614,27 @@ func _directed_handle_action(action_id:String):
 	elif(action_id.begins_with("custom_l_")):
 		directed_length = float(action_id.substr(len("custom_l_")))
 		directed_page = "main"
+	elif(action_id.begins_with("custom_t_")):
+		directed_thickness = int(action_id.substr(len("custom_t_")))
+		directed_page = "main"
+	elif(action_id.begins_with("custom_f_")):
+		directed_femininity = int(action_id.substr(len("custom_f_")))
+		directed_page = "main"
+	elif(action_id.begins_with("custom_v_")):
+		var selected_id:String = action_id.substr(len("custom_v_"))
+		if(selected_id == "keep"):
+			directed_vagina = ""
+		elif(selected_id == "remove"):
+			directed_vagina = "remove"
+		else:
+			for entry in DIRECTED_TF.VAGINA_TYPES:
+				if(entry[0] == selected_id):
+					directed_vagina = selected_id
+		directed_page = "main"
+	elif(action_id.begins_with("custom_col_")):
+		var selected_id:String = action_id.substr(len("custom_col_"))
+		directed_color = "" if selected_id == "keep" else selected_id
+		directed_page = "main"
 	elif(action_id == "custom_cancel"):
 		endActivity()
 	elif(action_id == "custom_apply"):
@@ -580,7 +643,7 @@ func _directed_handle_action(action_id:String):
 			addText("The TF pill is no longer in your inventory. No changes were applied.")
 			endActivity()
 			return
-		var descriptions:Array = DIRECTED_TF.apply_changes(getSub(), directed_breasts, directed_penis, directed_length)
+		var descriptions:Array = DIRECTED_TF.apply_changes(getSub(), directed_breasts, directed_penis, directed_length, directed_thickness, directed_femininity, directed_vagina, directed_color)
 		item.removeXOrDestroy(1)
 		satisfyGoal(SexGoal.UseTFDrug)
 		sendSexEvent(SexEvent.DrugSwallowed, DOM_0, SUB_0, {forced=false, itemID="TFPill"})
@@ -610,6 +673,10 @@ func saveData():
 	data["directed_breasts"] = directed_breasts
 	data["directed_penis"] = directed_penis
 	data["directed_length"] = directed_length
+	data["directed_thickness"] = directed_thickness
+	data["directed_femininity"] = directed_femininity
+	data["directed_vagina"] = directed_vagina
+	data["directed_color"] = directed_color
 
 	return data
 	
@@ -624,3 +691,7 @@ func loadData(data):
 	directed_breasts = SAVE.loadVar(data, "directed_breasts", -999)
 	directed_penis = SAVE.loadVar(data, "directed_penis", "")
 	directed_length = SAVE.loadVar(data, "directed_length", 0.0)
+	directed_thickness = SAVE.loadVar(data, "directed_thickness", -1)
+	directed_femininity = SAVE.loadVar(data, "directed_femininity", -1)
+	directed_vagina = SAVE.loadVar(data, "directed_vagina", "")
+	directed_color = SAVE.loadVar(data, "directed_color", "")

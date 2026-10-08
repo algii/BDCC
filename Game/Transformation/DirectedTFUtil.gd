@@ -11,6 +11,17 @@ const PENIS_TYPES = [
     ["ovipositorpenis", "Ovipositor"],
 ]
 const PENIS_LENGTHS = [5, 8, 10, 12, 15, 18, 20, 25, 30, 40, 50]
+const THICKNESS_VALUES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+const FEMININITY_VALUES = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+const VAGINA_TYPES = [
+    ["vagina", "Standard vagina"],
+    ["vaginaEggs", "Egg-laying vagina"],
+]
+const COLOR_MODES = [
+    ["colors", "Random body colors"],
+    ["skin", "Random skin pattern and colors"],
+    ["all", "Random full-body colors and patterns"],
+]
 
 static func breast_label(size:int) -> String:
     return "Unchanged" if size == -999 else BreastsSize.breastSizeToString(size)
@@ -28,7 +39,38 @@ static func penis_label(penis_id:String) -> String:
 static func length_label(length_cm:float) -> String:
     return "Unchanged" if length_cm <= 0 else str(length_cm) + " cm"
 
-static func apply_changes(target:BaseCharacter, breast_size:int, penis_id:String, length_cm:float) -> Array:
+static func thickness_label(value:int) -> String:
+    return "Unchanged" if value < 0 else str(value) + "%"
+
+static func femininity_label(value:int) -> String:
+    if(value < 0):
+        return "Unchanged"
+    var descriptor:String = "balanced"
+    if(value < 50):
+        descriptor = "masculine"
+    elif(value > 50):
+        descriptor = "feminine"
+    return str(value) + "% (" + descriptor + ")"
+
+static func vagina_label(vagina_id:String) -> String:
+    if(vagina_id == ""):
+        return "Unchanged"
+    if(vagina_id == "remove"):
+        return "Remove vagina"
+    for entry in VAGINA_TYPES:
+        if(entry[0] == vagina_id):
+            return entry[1]
+    return "Unchanged"
+
+static func color_label(mode:String) -> String:
+    if(mode == ""):
+        return "Unchanged"
+    for entry in COLOR_MODES:
+        if(entry[0] == mode):
+            return entry[1]
+    return "Unchanged"
+
+static func apply_changes(target:BaseCharacter, breast_size:int, penis_id:String, length_cm:float, thickness:int = -1, femininity:int = -1, vagina_id:String = "", color_mode:String = "") -> Array:
     var descriptions:Array = []
     if(target == null):
         return descriptions
@@ -56,6 +98,34 @@ static func apply_changes(target:BaseCharacter, breast_size:int, penis_id:String
     if(length_cm > 0 && target.hasBodypart(BodypartSlot.Penis)):
         target.getBodypart(BodypartSlot.Penis).lengthCM = clamp(length_cm, 4.0, 50.0)
         descriptions.append("penis length " + str(length_cm) + " cm")
+    # The game stores thickness and femininity in its existing character stats.
+    if(thickness >= 0 && thickness <= 150):
+        target.setThickness(thickness)
+        descriptions.append("thickness " + str(thickness) + "%")
+    if(femininity >= 0 && femininity <= 100):
+        target.setFemininity(femininity)
+        descriptions.append("femininity " + str(femininity) + "%")
+    # Genital slots are independent: adding a vagina does not remove a penis.
+    if(vagina_id == "remove"):
+        if(target.hasBodypart(BodypartSlot.Vagina)):
+            target.removeBodypart(BodypartSlot.Vagina)
+            descriptions.append("vagina removed")
+    elif(vagina_id in ["vagina", "vaginaEggs"] && GlobalRegistry.getBodypartRef(vagina_id) != null):
+        if(!target.hasBodypart(BodypartSlot.Vagina) || target.getBodypart(BodypartSlot.Vagina).id != vagina_id):
+            var new_vagina = GlobalRegistry.createBodypart(vagina_id)
+            if(new_vagina != null):
+                target.giveBodypart(new_vagina)
+                descriptions.append(vagina_label(vagina_id))
+    # Only explicitly chosen randomization uses RNG. It runs once on confirmation.
+    if(color_mode == "colors"):
+        target.applyRandomColors()
+        descriptions.append("random body colors")
+    elif(color_mode == "skin"):
+        target.applyRandomSkinAndColors()
+        descriptions.append("random skin and colors")
+    elif(color_mode == "all"):
+        target.applyRandomSkinAndColorsAndParts()
+        descriptions.append("random full-body skin and colors")
     if(!descriptions.empty()):
         target.updateAppearance()
     return descriptions
