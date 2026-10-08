@@ -1,0 +1,50 @@
+name: Build BDCC Custom TF Android
+
+on:
+  workflow_dispatch:
+
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-24.04
+    container:
+      image: barichello/godot-ci:3.6.2
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Configure Godot 3.6.2 Android export
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /root/.local/share/godot/templates
+          if [ ! -d /root/.local/share/godot/templates/3.6.2.stable ]; then
+            cp -a /root/.local/share/godot/export_templates/3.6.2.stable /root/.local/share/godot/templates/3.6.2.stable
+          fi
+          if [ ! -f /root/debug.keystore ]; then
+            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android -storepass android -keystore /root/debug.keystore -dname "CN=Android Debug,O=Android,C=US" -validity 9999
+          fi
+          sed -i 's|keystore/debug="C:/godot/debug.keystore"|keystore/debug="/root/debug.keystore"|' export_presets.cfg
+          sed -i 's|keystore/release="C:/godot/debug.keystore"|keystore/release="/root/debug.keystore"|' export_presets.cfg
+          # Installiert separat vom offiziellen BDCC, damit dessen Spielstaende nicht angetastet werden.
+          sed -i 's|package/unique_name="org.rahimew.bdcc"|package/unique_name="org.rahimew.bdcc.directedtf"|' export_presets.cfg
+
+      - name: Import assets
+        shell: bash
+        run: |
+          godot --editor --quit --path .
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          mkdir -p build/android
+          godot --verbose --export-debug "Android" build/android/BDCC_Custom_TF.apk
+          test -s build/android/BDCC_Custom_TF.apk
+
+      - name: Publish Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BDCC-Custom-TF-Android-APK
+          path: build/android/BDCC_Custom_TF.apk
+          if-no-files-found: error
