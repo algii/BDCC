@@ -30,6 +30,24 @@ jobs:
           # Installiert separat vom offiziellen BDCC, damit dessen Spielstaende nicht angetastet werden.
           sed -i 's|package/unique_name="org.rahimew.bdcc"|package/unique_name="org.rahimew.bdcc.directedtf"|' export_presets.cfg
 
+      # Some old tracked *.import files have no corresponding original image.
+      # They refer to stale cache output that Godot cannot regenerate.
+      # Clean ONLY the checkout workspace; this does not modify the GitHub repository.
+      - name: Remove orphaned Godot import descriptors
+        shell: bash
+        run: |
+          set -euo pipefail
+          removed=0
+          while IFS= read -r -d '' descriptor; do
+            source_file="${descriptor%.import}"
+            if [[ ! -f "$source_file" ]]; then
+              echo "Removing stale import metadata (source file absent): $descriptor"
+              rm -- "$descriptor"
+              (( removed += 1 ))
+            fi
+          done < <(find . -type f -name '*.import' -print0)
+          echo "Removed $removed orphaned Godot import descriptors."
+
       # Godot 3 may exit too early with --editor --quit, leaving .stex files absent.
       # Keep its editor process alive until the resources declared in *.import exist.
       - name: Import all Godot assets and verify imported textures
