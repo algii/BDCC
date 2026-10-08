@@ -5,23 +5,11 @@ var usedUniqueItemID:String = ""
 var timePassed:int = 0
 var pillVariants:Array = []
 
-# Directed TF - directly integrated into the original BDCC source code.
-# Affects only player-to-NPC TF pills in the procedural sex system.
-var directedTFPage:String = "main"
-var directedBreasts:int = -999 # Unchanged unless a size is chosen
-var directedPenisID:String = "" # Unchanged, "remove", or a bodypart ID
-var directedPenisLength:float = 0.0 # 0 = unchanged
-
-const DIRECTED_PENIS_TYPES = [
-	["humanpenis", "Human"],
-	["caninepenis", "Canine"],
-	["felinepenis", "Feline"],
-	["equinepenis", "Equine"],
-	["dragonpenis", "Dragon"],
-	["ovipositorpenis", "Ovipositor"],
-]
-const DIRECTED_PENIS_LENGTHS = [5.0, 8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0, 40.0, 50.0]
-
+const DIRECTED_TF = preload("res://Game/Transformation/DirectedTFUtil.gd")
+var directed_page:String = "main"
+var directed_breasts:int = -999
+var directed_penis:String = ""
+var directed_length:float = 0.0
 
 func _init():
 	id = "DomDrugUse"
@@ -112,6 +100,12 @@ func getStartActions(_sexEngine: SexEngine, _domInfo: SexDomInfo, _subInfo: SexS
 	var possibleCanApplyInfo = getPossibleCanApplyInfo(_sexEngine, _domInfo, _subInfo)
 	addDrugButtons(possibleCanApplyInfo, _sexEngine, _domInfo, _subInfo, true)
 
+	# Keep ALL vanilla drug actions intact. Add one separate, opt-in action.
+	if(_domInfo.getChar().isPlayer() && !_subInfo.getChar().isPlayer() && !_sexEngine.disableTFPills):
+		for pill in GM.pc.getInventory().getItemsWithTag(ItemTag.SexEngineDrug):
+			if(pill.id == "TFPill"):
+				addStartAction(["customtf", "TFPill", false, pill], "Custom TF pill", "Give this NPC a TF pill and choose specific body changes (permanent)", 1.0, {A_CATEGORY: getCategory()+["Directed TF"]})
+
 func addDrugButtons(possibleDrugsInfo:Array, _sexEngine: SexEngine, _domInfo: SexDomInfo, _subInfo: SexSubInfo, _isCanApply:bool = false):
 	var dom:BaseCharacter = _domInfo.getChar()
 	var sub:BaseCharacter = _subInfo.getChar()
@@ -161,6 +155,20 @@ func pcCanSeeText(ifcan, ifcant = "some pill"):
 
 func startActivity(_args):
 	state = ""
+	if(_args.size() > 3 && _args[0] == "customtf"):
+		var pill = _args[3]
+		if(pill == null || !getDom().isPlayer() || getSub().isPlayer()):
+			endActivity()
+			return
+		usedItemID = "TFPill"
+		usedUniqueItemID = pill.uniqueID
+		directed_page = "main"
+		directed_breasts = -999
+		directed_penis = ""
+		directed_length = 0.0
+		setState("directed_tf_menu")
+		addText("{dom.You} {dom.youVerb('prepare')} a custom TF pill for {sub.you}. Choose changes below, then give the pill.")
+		return
 	
 	if(_args[0] == "forcetosub"):
 		timePassed = 0
@@ -294,16 +302,11 @@ func startActivity(_args):
 			talkText(DOM_0, customDomSay)
 	
 func processTurn():
-	# A player-choice menu must not expire while NPC AI advances other turns.
 	if(getState() == "directed_tf_menu"):
 		return
 	timePassed += 1
 	
 	if(timePassed > 1):
-		# The force-feed completes now; defer the effect until player chooses it.
-		if(getState() in ["forcing", "forcingCanApply"] && _directedTFShouldOpen()):
-			if(_directedTFStart(true)):
-				return
 		endActivity()
 		if(getState() == "offering"):
 			addText("{sub.You} ignored {dom.your} offer.")
@@ -392,7 +395,7 @@ func getSubSpitOutChance(baseChance:float, domAngerRemoval:float) -> float:
 func getActions(_indx:int):
 	if(getState() == "directed_tf_menu"):
 		if(_indx == DOM_0 && getDom().isPlayer()):
-			_directedTFAddActions()
+			_directed_add_actions()
 		return
 	if(_indx == SUB_0):
 		if(getState() == "offering"):
@@ -427,12 +430,8 @@ func getActions(_indx:int):
 func doAction(_indx:int, _id:String, _action:Dictionary):
 	if(getState() == "directed_tf_menu"):
 		if(_indx == DOM_0 && getDom().isPlayer()):
-			_directedTFHandleAction(_id)
+			_directed_handle_action(_id)
 		return
-	# NPC voluntarily swallowed the offered pill, or swallowed while being forced.
-	if(_id in ["eatit", "swallowforced"] && _directedTFShouldOpen()):
-		if(_directedTFStart(_id == "swallowforced"):
-			return
 	if(_id == "spitpillout"):
 		if(RNG.chance(getSubSpitOutChance(100.0, 60.0))):
 			getDomInfo().addAnger(0.3)
@@ -522,125 +521,74 @@ func doAction(_indx:int, _id:String, _action:Dictionary):
 		addText("{sub.You} {sub.youVerb('try', 'tries')} to stop {dom.youHim} but {sub.youVerb('fail')}.")
 		reactSub(SexReaction.Resisting, [50])
 
-# The original TFPill.useInSex() is deliberately *not* called for this case.
-# Ordinary pill use, NPC-to-player, player-to-self and NPC-to-NPC are unchanged.
-func _directedTFShouldOpen() -> bool:
-	return usedItemID == "TFPill" && getDom() != null && getSub() != null && getDom().isPlayer() && !getSub().isPlayer()
+func _directed_add_actions():
+	if(directed_page == "main"):
+		addAction("custom_breasts", 1.0, "Breasts: " + DIRECTED_TF.breast_label(directed_breasts), "Select a breast size")
+		addAction("custom_penis", 1.0, "Penis: " + DIRECTED_TF.penis_label(directed_penis), "Select a penis type")
+		addAction("custom_length", 1.0, "Length: " + DIRECTED_TF.length_label(directed_length), "Choose penis length")
+		addAction("custom_apply", 1.0, "Give custom TF pill", "Consume one pill and apply these changes to this NPC")
+		addAction("custom_cancel", 1.0, "Cancel", "Return without consuming the pill")
+	elif(directed_page == "breasts"):
+		addAction("custom_b_-999", 1.0, "No change", "Leave breasts unchanged")
+		for size in range(BreastsSize.FLAT, BreastsSize.O + 1):
+			addAction("custom_b_" + str(size), 1.0, BreastsSize.breastSizeToString(size), "Set breast size")
+		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "penis"):
+		addAction("custom_p_keep", 1.0, "No change", "Leave penis unchanged")
+		addAction("custom_p_remove", 1.0, "Remove penis", "Remove penis bodypart")
+		for entry in DIRECTED_TF.PENIS_TYPES:
+			if(GlobalRegistry.getBodypartRef(entry[0]) != null):
+				addAction("custom_p_" + entry[0], 1.0, entry[1], "Choose this bodypart type")
+		addAction("custom_back", 1.0, "Back", "Return")
+	elif(directed_page == "length"):
+		addAction("custom_l_0", 1.0, "No change", "Leave length unchanged")
+		for length in DIRECTED_TF.PENIS_LENGTHS:
+			addAction("custom_l_" + str(length), 1.0, str(length) + " cm", "Choose length")
+		addAction("custom_back", 1.0, "Back", "Return")
 
-func _directedTFStart(forced:bool) -> bool:
-	if(!_directedTFShouldOpen()):
-		return false
-	var item = getDom().getInventory().getItemByUniqueID(usedUniqueItemID)
-	if(item == null):
-		return false
-	directedTFPage = "main"
-	directedBreasts = -999
-	directedPenisID = ""
-	directedPenisLength = 0.0
-	item.removeXOrDestroy(1)
-	setState("directed_tf_menu")
-	satisfyGoal(SexGoal.UseTFDrug)
-	fetishAffect(SUB_0, Fetish.TFReceiving, 10.0)
-	fetishAffect(DOM_0, Fetish.TFGiving, 10.0)
-	sendSexEvent(SexEvent.DrugSwallowed, DOM_0, SUB_0, {forced=forced, itemID=usedItemID})
-	addText("{sub.You} {sub.youVerb('swallow')} the transformation pill. [color=#00cfff]You may now choose the changes to {sub.yourHis} body.[/color]")
-	return true
-
-func _directedTFAddActions():
-	if(directedTFPage == "main"):
-		var breastTitle:String = "Unchanged" if directedBreasts == -999 else BreastsSize.breastSizeToString(directedBreasts)
-		var penisTitle:String = "Unchanged" if directedPenisID == "" else ("Removed" if directedPenisID == "remove" else directedPenisID)
-		var lengthTitle:String = "Unchanged" if directedPenisLength <= 0.0 else str(directedPenisLength)+" cm"
-		addAction("directed_edit_breasts", 1.0, "Breasts: "+breastTitle, "Choose any size from flat through O-cup")
-		addAction("directed_edit_penis", 1.0, "Penis type: "+penisTitle, "Keep, remove, or choose which type")
-		addAction("directed_edit_length", 1.0, "Penis length: "+lengthTitle, "Set a precise length")
-		addAction("directed_apply", 1.0, "Apply selected changes", "Change only selected bodyparts; other parts stay as they were")
-		addAction("directed_skip", 1.0, "Keep body unchanged", "Consume the pill without changing the NPC")
-	elif(directedTFPage == "breasts"):
-		addAction("directed_breast_-999", 1.0, "Leave breasts unchanged", "No breast modification")
-		for size in range(BreastsSize.FLAT, BreastsSize.O+1):
-			addAction("directed_breast_"+str(size), 1.0, BreastsSize.breastSizeToString(size), "Set this exact breast size")
-		addAction("directed_back", 1.0, "Back", "Return to main selection")
-	elif(directedTFPage == "penis"):
-		addAction("directed_penis_keep", 1.0, "Leave penis unchanged", "No type change")
-		addAction("directed_penis_remove", 1.0, "Remove penis", "Remove penis bodypart")
-		for penisData in DIRECTED_PENIS_TYPES:
-			if(GlobalRegistry.getBodypartRef(penisData[0]) != null):
-				addAction("directed_penis_"+str(penisData[0]), 1.0, str(penisData[1]), "Use this existing BDCC bodypart type")
-		addAction("directed_back", 1.0, "Back", "Return to main selection")
-	elif(directedTFPage == "length"):
-		addAction("directed_length_keep", 1.0, "Leave length unchanged", "No length change")
-		for cm in DIRECTED_PENIS_LENGTHS:
-			addAction("directed_length_"+str(cm), 1.0, str(cm)+" cm", "Set penis length")
-		addAction("directed_back", 1.0, "Back", "Return to main selection")
-
-func _directedTFHandleAction(actionID:String):
-	if(actionID == "directed_edit_breasts"):
-		directedTFPage = "breasts"
-	elif(actionID == "directed_edit_penis"):
-		directedTFPage = "penis"
-	elif(actionID == "directed_edit_length"):
-		directedTFPage = "length"
-	elif(actionID == "directed_back"):
-		directedTFPage = "main"
-	elif(actionID.begins_with("directed_breast_")):
-		directedBreasts = actionID.trim_prefix("directed_breast_").to_int()
-		directedTFPage = "main"
-	elif(actionID.begins_with("directed_penis_")):
-		var choiceID:String = actionID.trim_prefix("directed_penis_")
-		if(choiceID == "keep"):
-			directedPenisID = ""
-		elif(choiceID == "remove"):
-			directedPenisID = "remove"
+func _directed_handle_action(action_id:String):
+	if(action_id == "custom_breasts"):
+		directed_page = "breasts"
+	elif(action_id == "custom_penis"):
+		directed_page = "penis"
+	elif(action_id == "custom_length"):
+		directed_page = "length"
+	elif(action_id == "custom_back"):
+		directed_page = "main"
+	elif(action_id.begins_with("custom_b_")):
+		directed_breasts = int(action_id.substr(len("custom_b_")))
+		directed_page = "main"
+	elif(action_id.begins_with("custom_p_")):
+		var selected_id:String = action_id.substr(len("custom_p_"))
+		if(selected_id == "keep"):
+			directed_penis = ""
+		elif(selected_id == "remove"):
+			directed_penis = "remove"
 		else:
-			for entry in DIRECTED_PENIS_TYPES:
-				if(entry[0] == choiceID && GlobalRegistry.getBodypartRef(choiceID) != null):
-					directedPenisID = choiceID
-		directedTFPage = "main"
-	elif(actionID.begins_with("directed_length_")):
-		var lengthChoice:String = actionID.trim_prefix("directed_length_")
-		directedPenisLength = 0.0 if lengthChoice == "keep" else float(lengthChoice)
-		directedTFPage = "main"
-	elif(actionID == "directed_skip"):
-		addText("You decide to leave {sub.yourHis} body unchanged.")
+			for entry in DIRECTED_TF.PENIS_TYPES:
+				if(entry[0] == selected_id):
+					directed_penis = selected_id
+		directed_page = "main"
+	elif(action_id.begins_with("custom_l_")):
+		directed_length = float(action_id.substr(len("custom_l_")))
+		directed_page = "main"
+	elif(action_id == "custom_cancel"):
 		endActivity()
-	elif(actionID == "directed_apply"):
-		_directedTFApply()
+	elif(action_id == "custom_apply"):
+		var item = getDom().getInventory().getItemByUniqueID(usedUniqueItemID)
+		if(item == null || item.id != "TFPill"):
+			addText("The TF pill is no longer in your inventory. No changes were applied.")
+			endActivity()
+			return
+		var descriptions:Array = DIRECTED_TF.apply_changes(getSub(), directed_breasts, directed_penis, directed_length)
+		item.removeXOrDestroy(1)
+		satisfyGoal(SexGoal.UseTFDrug)
+		sendSexEvent(SexEvent.DrugSwallowed, DOM_0, SUB_0, {forced=false, itemID="TFPill"})
+		if(descriptions.empty()):
+			addText("{sub.You} {sub.youVerb('swallow')} the TF pill, but no compatible changes were selected.")
+		else:
+			addText("{sub.You} {sub.youVerb('swallow')} the TF pill. Custom changes applied: " + Util.join(descriptions, ", ") + ".")
 		endActivity()
-
-func _directedTFApply():
-	var npc:BaseCharacter = getSub()
-	if(npc == null):
-		return
-	var changes:Array = []
-	if(directedBreasts != -999):
-		if(!npc.hasBodypart(BodypartSlot.Breasts)):
-			var newBreasts = GlobalRegistry.createBodypart("humanbreasts")
-			if(newBreasts != null):
-				npc.giveBodypart(newBreasts)
-		if(npc.hasBodypart(BodypartSlot.Breasts)):
-			npc.getBodypart(BodypartSlot.Breasts).setBreastSizeSafe(directedBreasts)
-			changes.append("breasts: "+BreastsSize.breastSizeToString(directedBreasts))
-	if(directedPenisID == "remove"):
-		if(npc.hasBodypart(BodypartSlot.Penis)):
-			npc.removeBodypart(BodypartSlot.Penis)
-			changes.append("penis removed")
-	elif(directedPenisID != ""):
-		var newPenis = GlobalRegistry.createBodypart(directedPenisID)
-		if(newPenis != null):
-			if(npc.hasBodypart(BodypartSlot.Penis)):
-				newPenis.lengthCM = npc.getBodypart(BodypartSlot.Penis).lengthCM
-				newPenis.ballsScale = npc.getBodypart(BodypartSlot.Penis).ballsScale
-			npc.giveBodypart(newPenis)
-			changes.append("penis type: "+directedPenisID)
-	if(directedPenisLength > 0.0 && npc.hasBodypart(BodypartSlot.Penis)):
-		npc.getBodypart(BodypartSlot.Penis).lengthCM = clamp(directedPenisLength, 4.0, 50.0)
-		changes.append("penis length: "+str(directedPenisLength)+" cm")
-	npc.updateAppearance()
-	if(changes.empty()):
-		addText("No compatible changes were selected for {sub.you}.")
-	else:
-		addText("[color=#00cfff]Selected changes applied to {sub.you}: "+Util.join(changes, ", ")+".[/color]")
 
 func generatePillVariants(theItemID:String):
 	pillVariants = []
@@ -658,10 +606,10 @@ func saveData():
 	data["usedUniqueItemID"] = usedUniqueItemID
 	data["timePassed"] = timePassed
 	data["pillVariants"] = pillVariants
-	data["directedTFPage"] = directedTFPage
-	data["directedBreasts"] = directedBreasts
-	data["directedPenisID"] = directedPenisID
-	data["directedPenisLength"] = directedPenisLength
+	data["directed_page"] = directed_page
+	data["directed_breasts"] = directed_breasts
+	data["directed_penis"] = directed_penis
+	data["directed_length"] = directed_length
 
 	return data
 	
@@ -672,7 +620,7 @@ func loadData(data):
 	usedUniqueItemID = SAVE.loadVar(data, "usedUniqueItemID", "")
 	timePassed = SAVE.loadVar(data, "timePassed", 0)
 	pillVariants = SAVE.loadVar(data, "pillVariants", [])
-	directedTFPage = SAVE.loadVar(data, "directedTFPage", "main")
-	directedBreasts = SAVE.loadVar(data, "directedBreasts", -999)
-	directedPenisID = SAVE.loadVar(data, "directedPenisID", "")
-	directedPenisLength = SAVE.loadVar(data, "directedPenisLength", 0.0)
+	directed_page = SAVE.loadVar(data, "directed_page", "main")
+	directed_breasts = SAVE.loadVar(data, "directed_breasts", -999)
+	directed_penis = SAVE.loadVar(data, "directed_penis", "")
+	directed_length = SAVE.loadVar(data, "directed_length", 0.0)
