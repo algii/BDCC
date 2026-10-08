@@ -70,10 +70,10 @@ jobs:
           echo "Android SDK: $ANDROID_SDK"
 
           DEBUG_KEYSTORE="$HOME/debug.keystore"
-          if [[ -s /root/debug.keystore ]]; then
+          if [[ -s /root/debug.keystore ]] && keytool -list -keystore /root/debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
             cp /root/debug.keystore "$DEBUG_KEYSTORE"
           else
-            keytool -keyalg RSA -genkeypair -alias androiddebugkey -keypass android \
+            keytool -keyalg RSA -genkeypair -noprompt -alias androiddebugkey -keypass android \
               -storepass android -keystore "$DEBUG_KEYSTORE" \
               -dname 'CN=Android Debug,O=Android,C=US' -validity 9999
           fi
@@ -89,11 +89,29 @@ jobs:
           printf 'export/android/debug_keystore_pass = "android"\n' >> "$SETTINGS"
           cat "$SETTINGS"
 
-          # Keep an independent Android app ID, so the original installed BDCC is unaffected.
-          sed -i "s|keystore/debug="C:/godot/debug.keystore"|keystore/debug="$DEBUG_KEYSTORE"|" export_presets.cfg
-          sed -i "s|keystore/release="C:/godot/debug.keystore"|keystore/release="$DEBUG_KEYSTORE"|" export_presets.cfg
-          sed -i 's|package/unique_name="org.rahimew.bdcc"|package/unique_name="org.rahimew.bdcc.directedtf"|' export_presets.cfg
-          echo 'Export environment configured and validated.'
+          # Godot 3 export_presets.cfg is Variant syntax: string paths MUST be quoted.
+          # Previous v4 workflow incorrectly stripped quotes, causing invalid release keystore.
+          # A debug APK does not require a release keystore; disable release credentials.
+          sed -i "s|^keystore/debug=.*$|keystore/debug=\"${DEBUG_KEYSTORE}\"|" export_presets.cfg
+          sed -i 's|^keystore/debug_user=.*$|keystore/debug_user="androiddebugkey"|' export_presets.cfg
+          sed -i 's|^keystore/debug_password=.*$|keystore/debug_password="android"|' export_presets.cfg
+          sed -i 's|^keystore/release=.*$|keystore/release=""|' export_presets.cfg
+          sed -i 's|^keystore/release_user=.*$|keystore/release_user=""|' export_presets.cfg
+          sed -i 's|^keystore/release_password=.*$|keystore/release_password=""|' export_presets.cfg
+          # Separate package ID leaves an installed stock BDCC app untouched.
+          sed -i 's|^package/unique_name=.*$|package/unique_name="org.rahimew.bdcc.directedtf"|' export_presets.cfg
+
+          echo 'Validating Android keystore configuration in export_presets.cfg:'
+          grep '^keystore/\|^package/unique_name=' export_presets.cfg
+          grep -Fx "keystore/debug=\"${DEBUG_KEYSTORE}\"" export_presets.cfg
+          grep -Fx 'keystore/release=""' export_presets.cfg
+          grep -Fx 'package/unique_name="org.rahimew.bdcc.directedtf"' export_presets.cfg
+          test -s "$DEBUG_KEYSTORE"
+          keytool -list -keystore "$DEBUG_KEYSTORE" -storepass android -alias androiddebugkey >/dev/null || {
+            echo 'ERROR: debug.keystore is not usable with expected alias and password.'
+            exit 1
+          }
+          echo 'Android signing configuration verified.'
 
       # Some old tracked *.import files have no corresponding original image.
       # They refer to stale cache output that Godot cannot regenerate.
