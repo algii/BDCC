@@ -30,10 +30,63 @@ jobs:
           # Installiert separat vom offiziellen BDCC, damit dessen Spielstaende nicht angetastet werden.
           sed -i 's|package/unique_name="org.rahimew.bdcc"|package/unique_name="org.rahimew.bdcc.directedtf"|' export_presets.cfg
 
-      - name: Import assets
+      # Godot 3 may exit too early with --editor --quit, leaving .stex files absent.
+      # Keep its editor process alive until the resources declared in *.import exist.
+      - name: Import all Godot assets and verify imported textures
         shell: bash
         run: |
-          godot --editor --quit --path .
+          set -euo pipefail
+          godot --editor --no-window --path . --verbose > godot-import.log 2>&1 &
+          editor_pid=$!
+          trap 'kill "$editor_pid" 2>/dev/null || true' EXIT
+
+          python3 - <<'PYIMPORT'
+          import re
+          import sys
+          import time
+          from pathlib import Path
+
+          metadata = list(Path('.').rglob('*.import'))
+          expected = set()
+          for meta in metadata:
+              text = meta.read_text(encoding='utf-8', errors='replace')
+              for virtual_path in re.findall(r'res://\.import/[^"\s,\]]+', text):
+                  expected.add(Path(virtual_path[len('res://'):]))
+
+          if not expected:
+              sys.exit('ERROR: No expected imported resources found. Verify repository contents.')
+
+          print(f'Checking {len(expected)} expected imported resources from {len(metadata)} *.import files', flush=True)
+          deadline = time.monotonic() + 360
+          consecutive_ready = 0
+          missing = list(expected)
+          while time.monotonic() < deadline:
+              missing = [p for p in expected if not p.is_file() or p.stat().st_size == 0]
+              if not missing:
+                  consecutive_ready += 1
+                  if consecutive_ready >= 8:
+                      print('Godot asset import complete. All expected files exist.', flush=True)
+                      break
+              else:
+                  consecutive_ready = 0
+              if int(deadline - time.monotonic()) % 20 == 0:
+                  print(f'Waiting for Godot imports: {len(expected)-len(missing)}/{len(expected)} ready', flush=True)
+              time.sleep(1)
+          else:
+              print(f'ERROR: Asset import incomplete: {len(missing)} missing files', flush=True)
+              for missing_file in sorted(missing)[:15]:
+                  print(f'  MISSING: {missing_file}', flush=True)
+              try:
+                  print('--- Last lines from Godot import log ---', flush=True)
+                  print('\n'.join(Path('godot-import.log').read_text(errors='replace').splitlines()[-60:]), flush=True)
+              except OSError:
+                  pass
+              sys.exit(1)
+          PYIMPORT
+
+          kill "$editor_pid" 2>/dev/null || true
+          wait "$editor_pid" || true
+          echo 'Godot import stage completed and checked.'
 
       - name: Build debug APK
         shell: bash
