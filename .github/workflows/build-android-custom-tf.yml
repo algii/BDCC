@@ -40,49 +40,61 @@ jobs:
           editor_pid=$!
           trap 'kill "$editor_pid" 2>/dev/null || true' EXIT
 
-          python3 - <<'PYIMPORT'
-          import re
-          import sys
-          import time
-          from pathlib import Path
+          # Check imported files using standard Bash/Awk utilities only.
+          # The Godot CI container does not include Python 3.
+          mapfile -t expected < <(
+            find . -type f -name '*.import' -print0 |
+              xargs -0 awk -F '"' '/res:\/\/\.import\// {
+                for (i = 1; i <= NF; i++) {
+                  if ($i ~ /^res:\/\/\.import\//) print substr($i, 7)
+                }
+              }' | sort -u
+          )
 
-          metadata = list(Path('.').rglob('*.import'))
-          expected = set()
-          for meta in metadata:
-              text = meta.read_text(encoding='utf-8', errors='replace')
-              for virtual_path in re.findall(r'res://\.import/[^"\s,\]]+', text):
-                  expected.add(Path(virtual_path[len('res://'):]))
+          if (( ${#expected[@]} == 0 )); then
+            echo 'ERROR: No imported resource paths found in *.import files.'
+            tail -n 60 godot-import.log || true
+            exit 1
+          fi
 
-          if not expected:
-              sys.exit('ERROR: No expected imported resources found. Verify repository contents.')
+          echo "Checking ${#expected[@]} expected imported assets"
+          ready_streak=0
+          import_ok=0
+          missing=()
+          for (( second=0; second<480; second++ )); do
+            missing=()
+            for f in "${expected[@]}"; do
+              [[ -s "$f" ]] || missing+=("$f")
+            done
 
-          print(f'Checking {len(expected)} expected imported resources from {len(metadata)} *.import files', flush=True)
-          deadline = time.monotonic() + 360
-          consecutive_ready = 0
-          missing = list(expected)
-          while time.monotonic() < deadline:
-              missing = [p for p in expected if not p.is_file() or p.stat().st_size == 0]
-              if not missing:
-                  consecutive_ready += 1
-                  if consecutive_ready >= 8:
-                      print('Godot asset import complete. All expected files exist.', flush=True)
-                      break
-              else:
-                  consecutive_ready = 0
-              if int(deadline - time.monotonic()) % 20 == 0:
-                  print(f'Waiting for Godot imports: {len(expected)-len(missing)}/{len(expected)} ready', flush=True)
-              time.sleep(1)
-          else:
-              print(f'ERROR: Asset import incomplete: {len(missing)} missing files', flush=True)
-              for missing_file in sorted(missing)[:15]:
-                  print(f'  MISSING: {missing_file}', flush=True)
-              try:
-                  print('--- Last lines from Godot import log ---', flush=True)
-                  print('\n'.join(Path('godot-import.log').read_text(errors='replace').splitlines()[-60:]), flush=True)
-              except OSError:
-                  pass
-              sys.exit(1)
-          PYIMPORT
+            if (( ${#missing[@]} == 0 )); then
+              (( ready_streak += 1 ))
+              if (( ready_streak >= 8 )); then
+                import_ok=1
+                break
+              fi
+            else
+              ready_streak=0
+            fi
+
+            if (( second % 20 == 0 )); then
+              echo "Waiting for imports: $((${#expected[@]} - ${#missing[@]}))/${#expected[@]} ready (${second}s)"
+            fi
+            if ! kill -0 "$editor_pid" 2>/dev/null; then
+              echo 'ERROR: Godot editor exited before assets finished importing.'
+              break
+            fi
+            sleep 1
+          done
+
+          if (( import_ok != 1 )); then
+            echo "ERROR: Import incomplete, ${#missing[@]} required files still missing."
+            printf '  MISSING: %s\n' "${missing[@]:0:15}"
+            echo '--- Last Godot import log lines ---'
+            tail -n 60 godot-import.log || true
+            exit 1
+          fi
+          echo 'Asset import verified: all expected files exist.'
 
           kill "$editor_pid" 2>/dev/null || true
           wait "$editor_pid" || true
