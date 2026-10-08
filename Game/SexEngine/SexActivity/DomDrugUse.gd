@@ -14,6 +14,7 @@ var directed_thickness:int = -1
 var directed_femininity:int = -1
 var directed_vagina:String = ""
 var directed_color:String = ""
+var directed_species:String = ""
 
 func _init():
 	id = "DomDrugUse"
@@ -174,6 +175,7 @@ func startActivity(_args):
 		directed_femininity = -1
 		directed_vagina = ""
 		directed_color = ""
+		directed_species = ""
 		setState("directed_tf_menu")
 		addText("{dom.You} {dom.youVerb('prepare')} a custom TF pill for {sub.you}. Choose changes below, then give the pill.")
 		return
@@ -531,6 +533,8 @@ func doAction(_indx:int, _id:String, _action:Dictionary):
 
 func _directed_add_actions():
 	if(directed_page == "main"):
+		if(getSub() is DynamicCharacter || getSub().has_method("setSpecies")):
+			addAction("custom_species", 1.0, "Species: " + DIRECTED_TF.species_label(directed_species), "Transform species-specific body parts")
 		addAction("custom_breasts", 1.0, "Breasts: " + DIRECTED_TF.breast_label(directed_breasts), "Select a breast size")
 		addAction("custom_penis", 1.0, "Penis: " + DIRECTED_TF.penis_label(directed_penis), "Select a penis type")
 		addAction("custom_length", 1.0, "Length: " + DIRECTED_TF.length_label(directed_length), "Choose penis length")
@@ -540,6 +544,11 @@ func _directed_add_actions():
 		addAction("custom_color", 1.0, "Colors: " + DIRECTED_TF.color_label(directed_color), "Choose random colors/skin")
 		addAction("custom_apply", 1.0, "Give custom TF pill", "Consume one pill and apply these changes to this NPC")
 		addAction("custom_cancel", 1.0, "Cancel", "Return without consuming the pill")
+	elif(directed_page == "species"):
+		addAction("custom_s_keep", 1.0, "No change", "Keep current species")
+		for entry in DIRECTED_TF.get_species_options():
+			addAction("custom_s_" + entry[0], 1.0, entry[1], "Morph to this species")
+		addAction("custom_back", 1.0, "Back", "Return")
 	elif(directed_page == "breasts"):
 		addAction("custom_b_-999", 1.0, "No change", "Leave breasts unchanged")
 		for size in range(BreastsSize.FLAT, BreastsSize.O + 1):
@@ -581,7 +590,16 @@ func _directed_add_actions():
 		addAction("custom_back", 1.0, "Back", "Return")
 
 func _directed_handle_action(action_id:String):
-	if(action_id == "custom_breasts"):
+	if(action_id == "custom_species"):
+		directed_page = "species"
+	elif(action_id.begins_with("custom_s_")):
+		var selected_species:String = action_id.substr(len("custom_s_"))
+		if(selected_species == "keep"):
+			directed_species = ""
+		elif(GlobalRegistry.getAllPlayableSpecies().has(selected_species)):
+			directed_species = selected_species
+		directed_page = "main"
+	elif(action_id == "custom_breasts"):
 		directed_page = "breasts"
 	elif(action_id == "custom_penis"):
 		directed_page = "penis"
@@ -643,7 +661,7 @@ func _directed_handle_action(action_id:String):
 			addText("The TF pill is no longer in your inventory. No changes were applied.")
 			endActivity()
 			return
-		var descriptions:Array = DIRECTED_TF.apply_changes(getSub(), directed_breasts, directed_penis, directed_length, directed_thickness, directed_femininity, directed_vagina, directed_color)
+		var descriptions:Array = DIRECTED_TF.apply_changes(getSub(), directed_breasts, directed_penis, directed_length, directed_thickness, directed_femininity, directed_vagina, directed_color, directed_species)
 		item.removeXOrDestroy(1)
 		satisfyGoal(SexGoal.UseTFDrug)
 		sendSexEvent(SexEvent.DrugSwallowed, DOM_0, SUB_0, {forced=false, itemID="TFPill"})
@@ -677,6 +695,7 @@ func saveData():
 	data["directed_femininity"] = directed_femininity
 	data["directed_vagina"] = directed_vagina
 	data["directed_color"] = directed_color
+	data["directed_species"] = directed_species
 
 	return data
 	
@@ -695,3 +714,4 @@ func loadData(data):
 	directed_femininity = SAVE.loadVar(data, "directed_femininity", -1)
 	directed_vagina = SAVE.loadVar(data, "directed_vagina", "")
 	directed_color = SAVE.loadVar(data, "directed_color", "")
+	directed_species = SAVE.loadVar(data, "directed_species", "")

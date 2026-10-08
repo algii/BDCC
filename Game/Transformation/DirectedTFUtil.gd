@@ -23,6 +23,49 @@ const COLOR_MODES = [
     ["all", "Random full-body colors and patterns"],
 ]
 
+# Read the playable species dynamically so modded species appear too.
+static func get_species_options() -> Array:
+    var options:Array = []
+    for species_id in GlobalRegistry.getAllPlayableSpecies():
+        var species = GlobalRegistry.getSpecies(species_id)
+        if(species != null):
+            options.append([species_id, str(species.getVisibleName())])
+    return options
+
+static func species_label(species_id:String) -> String:
+    if(species_id == ""):
+        return "Unchanged"
+    for entry in get_species_options():
+        if(entry[0] == species_id):
+            return entry[1]
+    return "Unchanged"
+
+# Use the game's native bodypart transformation functions; do not reset
+# genitalia, hair or breasts when species is changed.
+static func apply_species(target:BaseCharacter, species_id:String) -> bool:
+    if(!GlobalRegistry.getAllPlayableSpecies().has(species_id)):
+        return false
+    # Static story NPCs can have fixed, script-defined species; changing the
+    # species field for them is not supported by their existing game API.
+    if(!(target is DynamicCharacter) && !target.has_method("setSpecies")):
+        return false
+    var the_species = GlobalRegistry.getSpecies(species_id)
+    if(the_species == null):
+        return false
+    var npc_gender = target.calculateNpcGender()
+    var morph_slots:Array = [BodypartSlot.Body, BodypartSlot.Head, BodypartSlot.Arms, BodypartSlot.Legs, BodypartSlot.Ears, BodypartSlot.Horns, BodypartSlot.Tail]
+    for slot in morph_slots:
+        var part_id = the_species.getDefaultForSlotForNpcGender(slot, npc_gender)
+        if(part_id is String && part_id != "" && GlobalRegistry.getBodypartRef(part_id) != null):
+            if(target.getBodypartID(slot) != part_id):
+                target.applyTFBodypart(slot, {"bodypartID": part_id})
+        elif(part_id == null && !BodypartSlot.isEssential(slot) && target.hasBodypart(slot)):
+            target.removeBodypart(slot, false)
+    target.applyTFData({"species": [species_id]})
+    if(target is DynamicCharacter):
+        target.npcCustomSpeciesName = ""
+    return true
+
 static func breast_label(size:int) -> String:
     return "Unchanged" if size == -999 else BreastsSize.breastSizeToString(size)
 
@@ -70,10 +113,13 @@ static func color_label(mode:String) -> String:
             return entry[1]
     return "Unchanged"
 
-static func apply_changes(target:BaseCharacter, breast_size:int, penis_id:String, length_cm:float, thickness:int = -1, femininity:int = -1, vagina_id:String = "", color_mode:String = "") -> Array:
+static func apply_changes(target:BaseCharacter, breast_size:int, penis_id:String, length_cm:float, thickness:int = -1, femininity:int = -1, vagina_id:String = "", color_mode:String = "", species_id:String = "") -> Array:
     var descriptions:Array = []
     if(target == null):
         return descriptions
+    # Apply species first; specific choices below can override the new form.
+    if(species_id != "" && apply_species(target, species_id)):
+        descriptions.append("species " + species_label(species_id))
     if(breast_size >= BreastsSize.FLAT && breast_size <= BreastsSize.O):
         if(!target.hasBodypart(BodypartSlot.Breasts)):
             var new_breasts = GlobalRegistry.createBodypart("humanbreasts")
