@@ -1,21 +1,24 @@
-# BDCC AI Chat launch fix v10.2
+# BDCC Custom AI Chat v10.1 — menu visibility fix
 
-**Problem addressed:** AI Chat shows nearby NPC names, but selecting a name returns to Look Around instead of showing the chat interface.
+Use this patch **after v10** (or over an existing v10 installation). It is designed to make AI Chat easier to find; it does **not** connect an AI provider automatically.
 
-**Changes:**
-- Adds a hard `preload()` reference to the AI chat script, making it an explicit dependency for Android export.
-- Explicitly registers `AINpcChatScene` via `GlobalRegistry.registerTemporaryScene()` before opening it. This does not depend on an exported directory listing recognizing new `.gd` files.
-- Opens AI Chat as a **child** scene. When you close it, you return to Look Around or the slave interaction menu.
-- Validates the selected NPC ID before trying to open the scene.
-- Does NOT change your TF pills, species editing, v9 domination interactions, Android build workflow, or AI server code.
+Changes:
+- `Look Around` now has a visible `AI Chat` selection action for nearby NPC pawns.
+- `Look Around > Focus > AI Chat` still exists.
+- The slave's main interaction screen shows `AI Chat` even when the NPC is away or performing an activity that otherwise hides normal buttons.
+- The slave's `Talk` submenu also shows `AI Chat`.
+- Includes `AINpcChatScene.gd` so the chat scene file is present if it was missed in the previous copy.
+- No changes to v8 TF, v9 domination, other gameplay, the Android workflow, or the server worker.
 
-## Installation
-1. Back up your saves and commit your working v10.1 state.
-2. Extract this archive.
-3. Copy the *contents* of `BDCC-main` into your local BDCC GitHub Desktop repository where `project.godot` is located, merging and replacing the three listed files.
-4. Commit and Push in GitHub Desktop.
-5. Rebuild with your working GitHub Actions Android workflow.
-6. Install the APK. Try **Look Around > AI Chat > NPC name**. You should see **AI Chat: [name]** and **Server settings** even though the AI service is not connected yet.
-7. Also test a slave's **AI Chat** entry.
+Installation:
+1. Back up saves and your working GitHub branch.
+2. Open GitHub Desktop > Repository > Show in Explorer.
+3. Copy the **contents** of this ZIP's `BDCC-main` folder over your BDCC project folder (where `project.godot` is).
+4. Commit changes and push to your GitHub repository.
+5. Rebuild using the **working** Android workflow and install the resulting APK.
+6. Check `Look Around > AI Chat` or open an owned slave > `AI Chat` / `Talk > AI Chat`.
+7. Configure the separately deployed online AI gateway under `AI Chat > Server settings`; without this, the menu opens but cannot return AI responses.
 
-**Status:** Structural checks passed. Not yet tested in Godot or on an Android device. If it still returns to Look Around, provide the game's GDScript error log; it could be a script initialization error rather than missing scene registration.
+Scope limitations:
+- Regular named story character menus are not modified; `Look Around` works with nearby **pawn** NPCs, not every scripted encounter.
+- The features have not been run inside Godot/Android in this environment. GitHub's green build does not prove in-game functionality.

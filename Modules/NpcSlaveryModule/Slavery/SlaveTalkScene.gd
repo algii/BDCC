@@ -1,7 +1,5 @@
 extends "res://Scenes/SceneBase.gd"
 
-const AI_CHAT_SCENE_SCRIPT = preload("res://Scenes/AINpcChatScene.gd")
-
 var npcID = ""
 var npc:DynamicCharacter
 var resultText = ""
@@ -536,7 +534,8 @@ func checkSlaveResist(resistChance, onlyActiveResist = false):
 		
 func _react(_action: String, _args):
 	if(_action == "ai_chat"):
-		_open_ai_chat(npcID)
+		endScene()
+		runScene("AINpcChatScene", [npcID])
 		return
 	if(_action == "endthescene"):
 		endScene()
@@ -884,18 +883,3 @@ func doDebugAction(_id, _args = {}):
 		npcSlavery.love = clamp(_args["amount"] / 100.0, 0.0, 1.0)
 	if(_id == "setBrokenSpirit"):
 		npcSlavery.brokenspirit = clamp(_args["amount"] / 100.0, 0.0, 1.0)
-
-
-# Register the chat scene explicitly rather than relying on directory scanning
-# of .gd files in exported Godot Android PCKs. Keep this menu on the stack:
-# closing AI Chat should return to where the player came from.
-func _open_ai_chat(target_id:String):
-	if(target_id == "" or GlobalRegistry.getCharacter(target_id) == null):
-		saynn("AI Chat: This NPC is no longer available.")
-		return
-	var chat_scene_id = GlobalRegistry.registerTemporaryScene(AI_CHAT_SCENE_SCRIPT)
-	if(chat_scene_id == null):
-		Log.printerr("BDCC AI Chat: Failed to register AINpcChatScene")
-		saynn("AI Chat could not be opened. Please check the game log.")
-		return
-	runScene(chat_scene_id, [target_id])
