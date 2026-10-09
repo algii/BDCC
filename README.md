@@ -1,21 +1,20 @@
-# BDCC AI Chat launch fix v10.2
+# BDCC AI Chat safe launch test v10.3
 
-**Problem addressed:** AI Chat shows nearby NPC names, but selecting a name returns to Look Around instead of showing the chat interface.
+This patch replaces **only two** existing scripts: `Scenes/LookingAroundScene.gd` and `Modules/NpcSlaveryModule/Slavery/SlaveTalkScene.gd`. It does not change custom TF, slave domination, build workflows, or `AINpcChatScene.gd`.
 
-**Changes:**
-- Adds a hard `preload()` reference to the AI chat script, making it an explicit dependency for Android export.
-- Explicitly registers `AINpcChatScene` via `GlobalRegistry.registerTemporaryScene()` before opening it. This does not depend on an exported directory listing recognizing new `.gd` files.
-- Opens AI Chat as a **child** scene. When you close it, you return to Look Around or the slave interaction menu.
-- Validates the selected NPC ID before trying to open the scene.
-- Does NOT change your TF pills, species editing, v9 domination interactions, Android build workflow, or AI server code.
+## Why v10.2 may have broken Look Around
 
-## Installation
-1. Back up your saves and commit your working v10.1 state.
-2. Extract this archive.
-3. Copy the *contents* of `BDCC-main` into your local BDCC GitHub Desktop repository where `project.godot` is located, merging and replacing the three listed files.
-4. Commit and Push in GitHub Desktop.
-5. Rebuild with your working GitHub Actions Android workflow.
-6. Install the APK. Try **Look Around > AI Chat > NPC name**. You should see **AI Chat: [name]** and **Server settings** even though the AI service is not connected yet.
-7. Also test a slave's **AI Chat** entry.
+v10.2 added an eager `preload()` of the experimental AI scene into the core NPC menu. If that new script fails to load or parse, the main menu can stop functioning. v10.3 removes both eager preloads. The AI script is loaded only after clicking AI Chat; if loading fails, ordinary NPC menus remain available and an explicit in-game error text is shown.
 
-**Status:** Structural checks passed. Not yet tested in Godot or on an Android device. If it still returns to Look Around, provide the game's GDScript error log; it could be a script initialization error rather than missing scene registration.
+## Install
+
+1. Make a backup of the last working APK and your game save files.
+2. If convenient, revert the single v10.2 commit in GitHub Desktop (History > right-click commit > Revert this commit); push.
+3. Copy the contents of `BDCC-main/` into the project directory containing `project.godot`. Replace the two matching files.
+4. Commit and push, then run the existing Android workflow.
+5. Test `Look Around` first, then `Look Around > AI Chat > NPC`.
+6. If the chat shows an unavailable message, share the game's GDScript error log. The AI scene itself may have a separate issue requiring a targeted fix.
+
+## Status
+
+Syntax and structural checks were performed; it has not been run in Godot or on Android. This is a stability/diagnostics patch, not a guaranteed complete fix for AI Chat.

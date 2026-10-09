@@ -1,6 +1,7 @@
 extends "res://Scenes/SceneBase.gd"
 
-const AI_CHAT_SCENE_SCRIPT = preload("res://Scenes/AINpcChatScene.gd")
+var ai_chat_launch_error:String = ""
+
 
 var pawnID:String = ""
 
@@ -8,6 +9,9 @@ func _init():
 	sceneID = "LookingAroundScene"
 
 func _run():
+	if(ai_chat_launch_error != ""):
+		saynn("AI Chat is unavailable: " + ai_chat_launch_error)
+		ai_chat_launch_error = ""
 	if(state == ""):
 		setCharactersEasyList(GM.main.IS.getPawnIDsAt(GM.pc.getLocation()))
 		
@@ -92,7 +96,7 @@ func _react(_action: String, _args):
 			target_id = str(_args[0])
 		if(target_id == ""):
 			return
-		_open_ai_chat(target_id)
+		_open_ai_chat_safe(target_id)
 		return
 	if(_action == "spyon"):
 		endScene()
@@ -148,16 +152,19 @@ func supportsShowingPawns() -> bool:
 	return true
 
 
-# Register the chat scene explicitly rather than relying on directory scanning
-# of .gd files in exported Godot Android PCKs. Keep this menu on the stack:
-# closing AI Chat should return to where the player came from.
-func _open_ai_chat(target_id:String):
+# Isolated AI chat launch: never preload the optional chat script when
+# initializing this core menu. A chat load error must not break Look Around.
+func _open_ai_chat_safe(target_id:String):
 	if(target_id == "" or GlobalRegistry.getCharacter(target_id) == null):
-		saynn("AI Chat: This NPC is no longer available.")
+		ai_chat_launch_error = "NPC is no longer available."
 		return
-	var chat_scene_id = GlobalRegistry.registerTemporaryScene(AI_CHAT_SCENE_SCRIPT)
-	if(chat_scene_id == null):
-		Log.printerr("BDCC AI Chat: Failed to register AINpcChatScene")
-		saynn("AI Chat could not be opened. Please check the game log.")
+	var chat_script = load("res://Scenes/AINpcChatScene.gd")
+	if(chat_script == null):
+		ai_chat_launch_error = "The chat script could not be loaded. Check the game log for a GDScript parse error."
 		return
+	var chat_scene_id = GlobalRegistry.registerTemporaryScene(chat_script)
+	if(chat_scene_id == null or chat_scene_id == ""):
+		ai_chat_launch_error = "The chat scene could not be registered."
+		return
+	# Do not end this menu: AI Chat opens on top, Back returns here.
 	runScene(chat_scene_id, [target_id])
