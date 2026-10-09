@@ -1,25 +1,24 @@
-# Broken Dreams Correctional Center
-Text based game about being a prisoner in a space prison with a lot of adult themes. Working title is Broken Dreams Correctional Center or BDCC for short
+# BDCC Custom AI Chat v10.1 — menu visibility fix
 
-### [More info about the game here](https://rahimew.itch.io/bdcc)
+Use this patch **after v10** (or over an existing v10 installation). It is designed to make AI Chat easier to find; it does **not** connect an AI provider automatically.
 
-This game is influenced a lot by other erotic text rpg games like Trials in the Tainted Space and Lilith's Throne. The idea of a scifi space prison setting came from a place inside second life called RRDC
+Changes:
+- `Look Around` now has a visible `AI Chat` selection action for nearby NPC pawns.
+- `Look Around > Focus > AI Chat` still exists.
+- The slave's main interaction screen shows `AI Chat` even when the NPC is away or performing an activity that otherwise hides normal buttons.
+- The slave's `Talk` submenu also shows `AI Chat`.
+- Includes `AINpcChatScene.gd` so the chat scene file is present if it was missed in the previous copy.
+- No changes to v8 TF, v9 domination, other gameplay, the Android workflow, or the server worker.
 
-<img src="https://user-images.githubusercontent.com/14040378/163157468-96aeb9dc-6605-4abe-863f-524510b9f940.png" width="48%"> <img src="https://user-images.githubusercontent.com/14040378/163156752-7863a466-c790-48b8-a04c-c7f470db0373.png" width="48%"> <img src="https://user-images.githubusercontent.com/14040378/163156860-c7da2265-c971-42d6-8e07-c96084a2c902.png" width="48%"> <img src="https://user-images.githubusercontent.com/14040378/163156669-1bb5ed09-90da-4c38-b2aa-c2d82346eb8d.png" width="48%">
+Installation:
+1. Back up saves and your working GitHub branch.
+2. Open GitHub Desktop > Repository > Show in Explorer.
+3. Copy the **contents** of this ZIP's `BDCC-main` folder over your BDCC project folder (where `project.godot` is).
+4. Commit changes and push to your GitHub repository.
+5. Rebuild using the **working** Android workflow and install the resulting APK.
+6. Check `Look Around > AI Chat` or open an owned slave > `AI Chat` / `Talk > AI Chat`.
+7. Configure the separately deployed online AI gateway under `AI Chat > Server settings`; without this, the menu opens but cannot return AI responses.
 
-### [Changelog](/CHANGELOG.md)
-
-### [Support me on Subscribestar.adult](https://subscribestar.adult/rahi)
-
-Uses the latest version of Godot 3.X engine
-
-# How to start contributing
-- Clone this repo using git or by downloading the [source code](https://github.com/Alexofp/BDCC/archive/refs/heads/main.zip)
-- Download the latest version of [Godot engine 3.X](https://godotengine.org/). Godot 4.0 is not supported
-- Open the godot engine and click Import Project. Point to the project.godot file.
-- The editor will open up. You can start tinkering.
-- To run the game press F5 or the play icon in the corner
-
-### [Modding wiki](../../wiki)
-
-This game will stay open source. You can use this as a learning resource, help me expand it or use as a base for your own game.
+Scope limitations:
+- Regular named story character menus are not modified; `Look Around` works with nearby **pawn** NPCs, not every scripted encounter.
+- The features have not been run inside Godot/Android in this environment. GitHub's green build does not prove in-game functionality.

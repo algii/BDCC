@@ -29,6 +29,8 @@ func _run():
 	if(state == ""):
 		aimCameraAndSetLocName(GM.pc.getLocation())
 		addCharacter(npcID)
+		# Keep this entry visible even if the slave is away or busy.
+		addButton("AI Chat", "Talk freely to this NPC using your online AI gateway", "ai_chat")
 		
 		var npcSlavery:NpcSlave = npc.getNpcSlavery()
 		if(npcSlavery == null):
@@ -149,6 +151,7 @@ func _run():
 	if(state == "talk_menu"):
 		saynn("What do you want to tell your slave?")
 		
+		addButton("AI Chat", "Free-form conversation with this NPC", "ai_chat")
 		addButtonsForActionsOfType(SlaveActionBase.Talk)
 		addButton("Back", "You changed your mind!", "")
 
@@ -530,6 +533,10 @@ func checkSlaveResist(resistChance, onlyActiveResist = false):
 	return false
 		
 func _react(_action: String, _args):
+	if(_action == "ai_chat"):
+		endScene()
+		runScene("AINpcChatScene", [npcID])
+		return
 	if(_action == "endthescene"):
 		endScene()
 		return

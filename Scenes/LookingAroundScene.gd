@@ -10,6 +10,7 @@ func _run():
 		setCharactersEasyList(GM.main.IS.getPawnIDsAt(GM.pc.getLocation()))
 		
 		saynn("Here is what's happening around you:")
+		addButtonAt(13, "AI Chat", "Choose a nearby NPC for AI chat", "ai_select")
 		addButtonAt(14, "Back", "Enough looking around", "endthescene")
 		
 		var pcLoc:String = GM.pc.getLocation()
@@ -33,6 +34,20 @@ func _run():
 		
 		pawnID = ""
 
+	if(state == "ai_select"):
+		saynn("Choose a nearby NPC for AI Chat:")
+		setCharactersEasyList(GM.main.IS.getPawnIDsAt(GM.pc.getLocation()))
+		var candidates:Array = GM.main.IS.getPawnsAt(GM.pc.getLocation())
+		for candidateA in candidates:
+			var candidate:CharacterPawn = candidateA
+			if(candidate.isPlayer()):
+				continue
+			var target = candidate.getCharacter()
+			if(target == null):
+				continue
+			addButton(target.getName(), "Start an AI Chat with this NPC", "ai_chat", [candidate.charID])
+		addButtonAt(14, "Back", "Return to looking around", "")
+
 	if(state == "focus"):
 		var pcPawn:CharacterPawn = GM.main.IS.getPawn("pc")
 		addButtonAt(14, "Back", "Go back to the previous menu", "")
@@ -44,6 +59,7 @@ func _run():
 			return
 			
 		addButton("Spy on", "See what they are up to", "spyon", [pawn])
+		addButton("AI Chat", "Have a free-form online conversation with this NPC", "ai_chat")
 			
 		var interaction:PawnInteractionBase = pawn.getInteraction()
 		if(interaction == null):
@@ -68,6 +84,15 @@ func _react(_action: String, _args):
 		return
 	if(_action == "focus"):
 		pawnID = _args[0].charID
+	if(_action == "ai_chat"):
+		var target_id:String = pawnID
+		if(_args.size() > 0):
+			target_id = str(_args[0])
+		if(target_id == ""):
+			return
+		endScene()
+		runScene("AINpcChatScene", [target_id])
+		return
 	if(_action == "spyon"):
 		endScene()
 		runScene("SpyOnPawnScene", [_args[0].charID])
