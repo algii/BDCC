@@ -60,7 +60,7 @@ func _run():
 	if(api_url == "" or game_access_code == ""):
 		saynn("Set up your AI gateway first using 'Server settings'.")
 	else:
-		var start:int = max(0, transcript.size() - 10)
+		var start:int = int(max(0, transcript.size() - 10))
 		for i in range(start, transcript.size()):
 			var entry:Dictionary = transcript[i]
 			var who:String = "You" if(entry.get("role", "") == "user") else npc.getName()
